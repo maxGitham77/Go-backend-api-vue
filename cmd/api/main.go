@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/maxGitham77/vueapi/internal/data"
+	"github.com/maxGitham77/vueapi/internal/driver"
 	"log"
 	"net/http"
 	"os"
@@ -11,12 +13,16 @@ type config struct {
 	port int
 }
 
+// application is the type for all data we want to share with the various part of the application.
+// We will share this information in most cases by using this type as the receiver for functions
 type application struct {
 	config   config
 	infoLog  *log.Logger
 	errorLog *log.Logger
+	models   data.Models
 }
 
+// main is the main entry point for the application
 func main() {
 	var cfg config
 	cfg.port = 8081
@@ -24,13 +30,22 @@ func main() {
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
+	/*host=localhost port=5432 user=postgres password=password dbname=vueapi sslmode=disable timezone=UTC connect_timeout=5*/
+	dsn := os.Getenv("DSN")
+	db, err := driver.ConnectPostgres(dsn)
+	if err != nil {
+		log.Fatal("Cannot connect to database")
+	}
+	defer db.SQL.Close()
+
 	app := &application{
 		config:   cfg,
 		infoLog:  infoLog,
 		errorLog: errorLog,
+		models:   data.New(db.SQL),
 	}
 
-	err := app.serve()
+	err = app.serve()
 	if err != nil {
 		log.Fatal(err)
 	}
