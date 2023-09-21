@@ -16,10 +16,11 @@ type config struct {
 // application is the type for all data we want to share with the various part of the application.
 // We will share this information in most cases by using this type as the receiver for functions
 type application struct {
-	config   config
-	infoLog  *log.Logger
-	errorLog *log.Logger
-	models   data.Models
+	config      config
+	infoLog     *log.Logger
+	errorLog    *log.Logger
+	models      data.Models
+	environment string
 }
 
 // main is the main entry point for the application
@@ -30,8 +31,9 @@ func main() {
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
-	/*host=localhost port=5432 user=postgres password=password dbname=vueapi sslmode=disable timezone=UTC connect_timeout=5*/
+	/*dsn := "host=localhost port=5432 user=postgres password=password dbname=vueapi sslmode=disable timezone=UTC connect_timeout=5"*/
 	dsn := os.Getenv("DSN")
+	environment := os.Getenv("ENV")
 	db, err := driver.ConnectPostgres(dsn)
 	if err != nil {
 		log.Fatal("Cannot connect to database")
@@ -39,10 +41,11 @@ func main() {
 	defer db.SQL.Close()
 
 	app := &application{
-		config:   cfg,
-		infoLog:  infoLog,
-		errorLog: errorLog,
-		models:   data.New(db.SQL),
+		config:      cfg,
+		infoLog:     infoLog,
+		errorLog:    errorLog,
+		models:      data.New(db.SQL),
+		environment: environment,
 	}
 
 	err = app.serve()

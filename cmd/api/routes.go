@@ -4,9 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/maxGitham77/vueapi/internal/data"
 	"net/http"
-	"time"
 )
 
 // routes generates our routes and attaches them to handlers, using the chi router
@@ -27,109 +25,119 @@ func (app *application) routes() http.Handler {
 
 	mux.Post("/users/login", app.Login)
 	mux.Post("/users/logout", app.Logout)
+	mux.Post("/validate-token", app.ValidateToken)
 
-	mux.Get("/users/all", func(writer http.ResponseWriter, request *http.Request) {
-		var users data.User
-		all, err := users.GetAll()
-		if err != nil {
-			app.errorLog.Println(err)
-			return
-		}
+	mux.Post("/books", app.AllBooks)
+	mux.Get("/books", app.AllBooks)
 
-		paylaod := jsonResponse{
-			Error:   false,
-			Message: "success",
-			Data:    envelop{"users": all},
-		}
+	mux.Route("/admin", func(mux chi.Router) {
+		mux.Use(app.AuthTokenMiddleware)
+		mux.Post("/users", app.AllUsers)
+		mux.Post("/users/save", app.EditUser)
+		mux.Post("/users/get/{id}", app.GetUser)
+		mux.Post("/users/delete", app.DeleteUser)
+		mux.Post("/log-user-out/{id}", app.LogUserOutAndSetInactive)
 
-		app.writeJSON(writer, http.StatusOK, paylaod)
+		/*mux.Post("/foo", func(writer http.ResponseWriter, request *http.Request) {
+			payload := jsonResponse{
+				Error:   false,
+				Message: "bar",
+			}
+			app.writeJSON(writer, http.StatusOK, payload)
+		})*/
 	})
 
-	mux.Get("/users/add", func(writer http.ResponseWriter, request *http.Request) {
-		var u = data.User{
-			Email:     "friend@friend.com",
-			Firstname: "Friend",
-			Lastname:  "Forever",
-			Password:  "password",
-		}
+	// static files
+	fileServer := http.FileServer(http.Dir("./static"))
+	mux.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
-		app.infoLog.Println("Adding user...")
+	/*
+		mux.Get("/users/add", func(writer http.ResponseWriter, request *http.Request) {
+			var u = data.User{
+				Email:     "friend@friend.com",
+				Firstname: "Friend",
+				Lastname:  "Forever",
+				Password:  "password",
+			}
 
-		id, err := app.models.User.Insert(u)
-		if err != nil {
-			app.errorLog.Println(err)
-			app.errorJSON(writer, err, http.StatusForbidden)
-			return
-		}
-		app.infoLog.Println("Got back id of ", id)
-		newUser, _ := app.models.User.GetById(id)
-		app.writeJSON(writer, http.StatusOK, newUser)
-	})
+			app.infoLog.Println("Adding user...")
 
-	mux.Get("/test-generate-token", func(writer http.ResponseWriter, request *http.Request) {
-		token, err := app.models.User.Token.GenerateToken(2, 60*time.Minute)
-		if err != nil {
-			app.errorLog.Println(err)
-			return
-		}
+			id, err := app.models.User.Insert(u)
+			if err != nil {
+				app.errorLog.Println(err)
+				app.errorJSON(writer, err, http.StatusForbidden)
+				return
+			}
+			app.infoLog.Println("Got back id of ", id)
+			newUser, _ := app.models.User.GetById(id)
+			app.writeJSON(writer, http.StatusOK, newUser)
+		})
 
-		token.Email = "friend@friend.com"
-		token.CreatedAt = time.Now()
-		token.UpdatedAt = time.Now()
+		mux.Get("/test-generate-token", func(writer http.ResponseWriter, request *http.Request) {
+			token, err := app.models.User.Token.GenerateToken(2, 60*time.Minute)
+			if err != nil {
+				app.errorLog.Println(err)
+				return
+			}
 
-		payload := jsonResponse{
-			Error:   false,
-			Message: "success",
-			Data:    token,
-		}
-		app.writeJSON(writer, http.StatusOK, payload)
+			token.Email = "friend@friend.com"
+			token.CreatedAt = time.Now()
+			token.UpdatedAt = time.Now()
 
-	})
+			payload := jsonResponse{
+				Error:   false,
+				Message: "success",
+				Data:    token,
+			}
+			app.writeJSON(writer, http.StatusOK, payload)
 
-	mux.Get("/test-save-token", func(writer http.ResponseWriter, request *http.Request) {
-		token, err := app.models.User.Token.GenerateToken(2, 60*time.Minute)
-		if err != nil {
-			app.errorLog.Println(err)
-			return
-		}
+		})
 
-		user, err := app.models.User.GetById(2)
-		if err != nil {
-			app.errorLog.Println(err)
-			return
-		}
+		mux.Get("/test-save-token", func(writer http.ResponseWriter, request *http.Request) {
+			token, err := app.models.User.Token.GenerateToken(2, 60*time.Minute)
+			if err != nil {
+				app.errorLog.Println(err)
+				return
+			}
 
-		token.UserID = user.ID
-		token.CreatedAt = time.Now()
-		token.UpdatedAt = time.Now()
+			user, err := app.models.User.GetById(2)
+			if err != nil {
+				app.errorLog.Println(err)
+				return
+			}
 
-		err = token.Insert(*token, *user)
-		if err != nil {
-			app.errorLog.Println(err)
-			return
-		}
+			token.UserID = user.ID
+			token.CreatedAt = time.Now()
+			token.UpdatedAt = time.Now()
 
-		payload := jsonResponse{
-			Error:   false,
-			Message: "success",
-			Data:    token,
-		}
-		app.writeJSON(writer, http.StatusOK, payload)
-	})
+			err = token.Insert(*token, *user)
+			if err != nil {
+				app.errorLog.Println(err)
+				return
+			}
 
-	mux.Get("/test-validate-token", func(writer http.ResponseWriter, request *http.Request) {
-		tokenToValidate := request.URL.Query().Get("token")
-		valid, err := app.models.Token.ValidToken(tokenToValidate)
-		if err != nil {
-			app.errorJSON(writer, err)
-			return
-		}
-		var payload jsonResponse
-		payload.Error = false
-		payload.Data = valid
+			payload := jsonResponse{
+				Error:   false,
+				Message: "success",
+				Data:    token,
+			}
+			app.writeJSON(writer, http.StatusOK, payload)
+		})
 
-		app.writeJSON(writer, http.StatusOK, payload)
-	})
+		mux.Get("/test-validate-token", func(writer http.ResponseWriter, request *http.Request) {
+			tokenToValidate := request.URL.Query().Get("token")
+			valid, err := app.models.Token.ValidToken(tokenToValidate)
+			if err != nil {
+				app.errorJSON(writer, err)
+				return
+			}
+			var payload jsonResponse
+			payload.Error = false
+			payload.Data = valid
+
+			app.writeJSON(writer, http.StatusOK, payload)
+		})
+	*/
 
 	return mux
 }
